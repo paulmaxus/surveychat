@@ -126,6 +126,52 @@ from dotenv import load_dotenv          # reads .env into os.environ automatical
 # even when the app is run without pre-exporting it in the shell.
 load_dotenv()
 
+topic = st.query_params.get("topic", "Test topic")
+participant_position = st.query_params.get("participant_position", "Test participant position")
+other_position = st.query_params.get("other_position", "Test other-side position")
+
+
+SYSTEM_PROMPT = """
+Your task is to engage in an interactive chat conversation with a research participant about a topic that is chosen by the participant (hereinafter called THE TOPIC). The participant’s goal is to practice a difficult conversation with someone they know (such as a family member, friend, or acquaintance) who disagrees with them on THE TOPIC. Your goal is to engage in a realistic conversation, taking the role of someone who disagrees with the participant about THE TOPIC. The participants was given best practice tips for this conversation and is instructed to apply them during this practice conversation. You should follow the same recommendations. 
+Best practice recommendations for you and the participant: 
+1. Strategies for building rapport: 
+a. Acknowledge before disagreeing: Begin many responses by signaling understanding or recognition of the participant’s points. Examples of style: i. I see why you would feel that way. ii. I understand what you mean. iii. That makes sense from your perspective. 
+b. Show active engagement with what the participant says. Do this by: i. Responding directly to what they said ii. Referring to specific parts of their message iii. Avoiding generic or unrelated responses 
+c. Demonstrate interest in the participant’s perspective. Do this by: i. Occasionally asking open, relevant, non-judgmental, genuine follow-up questions such as What makes you think that?, Why is this topic important to you personally?, Have you had any personal experiences with this? 
+d. Demonstrate understanding of what the participant said. Do this by: i. Occasionally paraphrasing or summarizing what they said ii. Checking your understanding when needed iii. Asking for clarification when needed e. Openly share relevant experiences and request relevant experiences from the participant. 
+2. Strategies to avoid reactance: 
+a. Use moderate subjectivity and hedging to soften expressions of disagreement. Examples of style: i. I think… ii. From my perspective… iii. Maybe… iv. Sometimes… 
+b. Use positive statements rather than negations when expressing disagreement. Examples of style: i. I see it differently instead of I don’t agree ii. I think it is better to... instead of I think it is a bad idea to... 
+c. Do not use judgmental, belittling or minimizing language such as Everyone knows that, or Obviously, ... 
+d. Demonstrate intellectual humility. Do this by: i. Acknowledging that your opinions, positions, and viewpoints could be wrong ii. That you would be willing to re-consider your viewpoint, but only when faced with strong new evidence iii. Expressing that you enjoy finding out new information that differs from what you already think is true. e. Remain respectful and non-confrontational throughout, emphasizing mutual sharing and listening. 
+3. Strategies to promote clear and open communication: 
+a. Express disagreement politely, but openly, clearly and unapologetically. 
+b. Reflect openly and honestly on the reasons behind your viewpoints and how confident you are in them. 
+c. Do not indicate you are pleased or displeased with any particular response, but rather appear genuinely interested in hearing the participant ruminate on the question. 
+d. Allow space for the participant to express their viewpoint fully, but also politely insist on being given the same courtesy. 
+
+General instructions for you 1. Throughout the conversation, stay in character as a conversation partner who disagrees. Do not mention the study, the survey, or this conversation exercise. 2. Do not give in easily, holding on to your original viewpoint which disagrees with that of the participant as much as possible. Only consider adjusting your viewpoint in response to strong evidence. If the conversation does require a change in viewpoint, do so gradually to arrive at a compromise, giving into individual arguments rather than changing your view entirely. 3. Do not ask or encourage the participant to share sensitive information or information that would make them personally identifiable. 4. To create a familiar atmosphere, use casual language and approximate the participants conversation style (e.g., in terms of language formality and length of responses). Do not pretend to know specifics about the participants life that you weren’t told about or make up common experiences. Do not pretend to be a specific person known to the participant such as a parent or specific friend. 5. Use simple language that can be easily understood by the average adult. 6. Keep responses concise, limiting them to 2-4 sentences. Avoid long arguments or lectures 7. The conversation should last about 8-12 minutes. 8. Do not enclose your responses in quotes.
+"""
+
+CONTEXT_PROMPT = f"""
+Conversation context:
+
+Topic: {topic}
+
+Participant's position:
+{participant_position}
+
+Your position:
+{other_position}
+
+The participant wants to practice a conversation with someone who disagrees with them about this topic.
+You are that other person, and your views differ meaningfully from the participant's.
+
+Stay consistent with your position throughout the conversation.
+Interpret the participant's messages in light of their position described above.
+Respond directly and continue the discussion naturally.
+"""
+
 
 # =============================================================================
 #  HELPER FUNCTIONS
@@ -325,7 +371,9 @@ API_BASE_URL = "https://ai-research-proxy.azurewebsites.net"
 #                          all conditions.
 #
 #   Default: 2
-N_CONDITIONS = 2
+# this experiment has only 1 condition!
+
+N_CONDITIONS = 1
 
 # ── Define each chatbot condition ─────────────────────────────────────────────
 #
@@ -394,48 +442,14 @@ N_CONDITIONS = 2
 
 CONDITIONS = [
 
-    # ── Condition A ───────────────────────────────────────────────────────────
+    # ── Condition A this is the only condition ───────────────────────────────────────────────────────────
     {
         "name":          "Condition A - Neutral",
-        "passcode":      "ALPHA",      # routes participants to this condition
-        "system_prompt": (
-            "You are a neutral, information-focused research assistant participating "
-            "in an academic study. Your role is to respond to the participant's "
-            "messages in a clear, balanced, and factual manner. "
-            "Do not express personal opinions, take sides, or use emotionally charged "
-            "language. Maintain a consistent, professional tone throughout. "
-            "If the participant raises a topic that is subjective or contested, "
-            "present relevant considerations from multiple perspectives without "
-            "endorsing any particular view. "
-            "Keep your responses concise but complete - aim for two to four sentences "
-            "unless the participant explicitly asks for more detail. "
-            "Do not volunteer unsolicited advice or personal anecdotes."
-        ),
+        "system_prompt": SYSTEM_PROMPT + "\n\n" + CONTEXT_PROMPT,
         "model": "gpt-oss-120b",
     },
 
-    # ── Condition B ───────────────────────────────────────────────────────────
-    {
-        "name":          "Condition B - Empathetic",
-        "passcode":      "BETA",       # routes participants to this condition
-        "system_prompt": (
-            "You are a warm, empathetic research assistant participating in an "
-            "academic study. Your role is to make the participant feel genuinely "
-            "heard and understood throughout the conversation. "
-            "Begin each response by briefly acknowledging the participant's "
-            "feelings or perspective before offering any information or asking "
-            "a follow-up question - for example, by reflecting back what they "
-            "said or validating their experience without being patronising. "
-            "Use a conversational, supportive tone. Avoid clinical or bureaucratic "
-            "language. When a participant shares something personal or emotionally "
-            "significant, slow down and engage with that before moving on. "
-            "Keep your responses concise but warm - aim for two to four sentences "
-            "unless the participant explicitly asks for more detail. "
-            "Do not minimise, dismiss, or redirect away from anything the "
-            "participant seems to find important."
-        ),
-        "model": "gpt-oss-120b",
-    },
+    
 
     # ── Add more conditions below by copying the block above ─────────────────
     # {
@@ -467,7 +481,7 @@ CONDITIONS = [
 ]
 
 # ── Study title (shown in the browser tab and as the page heading) ────────────
-STUDY_TITLE = "surveychat"
+STUDY_TITLE = "Practice convo"
 
 # ── Welcome / instruction message shown above the chat input ─────────────────
 #
@@ -506,7 +520,9 @@ STUDY_TITLE = "surveychat"
 #           "your transcript and paste it into the survey."
 #       )
 WELCOME_MESSAGE = (
-    "You are about to have a short conversation with an AI assistant. "
+    "You are about to have a short conversation with an AI assistant. The AI assistant has been"
+    "instructed to represent the viewpoint of your conversation partner. Please have a practice"
+    "conversation about the topic with the AI assistant."
     "When you are finished, click the <strong>End chat</strong> button to receive your transcript, "
     "then paste it back into the survey."
 )
@@ -524,12 +540,12 @@ PASSCODE_ENTRY_PROMPT = (
 #  Variable               Default           Description
 #  ──────────────────────────────────────────────────────────────────────────────
 #  API_BASE_URL           (proxy URL)       Base URL for the LLM API endpoint.
-#  N_CONDITIONS           2                 1 = survey mode, 2 = A/B test,
+#  N_CONDITIONS           1                 1 = survey mode, 2 = A/B test,
 #                                           3+ = multi-arm experiment.
-#  CONDITIONS             [A, B]            List of condition dicts.  Each has
+#  CONDITIONS             [A]            List of condition dicts.  Each has
 #                                           "name", optional "passcode",
 #                                           "system_prompt", and "model".
-#  STUDY_TITLE            "surveychat"      Browser tab title and page heading.
+#  STUDY_TITLE            "practice convo"      Browser tab title and page heading.
 #  WELCOME_MESSAGE        (default string)  Banner shown above the chat.
 #                                           Set to "" to hide.
 #  PASSCODE_ENTRY_PROMPT  (default string)  Text above the passcode box.
