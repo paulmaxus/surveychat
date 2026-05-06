@@ -32,12 +32,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Streamlit listens on 8501 by default.
-EXPOSE 8501
+EXPOSE 8080
 
 # Health check - Docker will mark the container unhealthy if Streamlit stops
 # responding, which is useful when running behind a load balancer.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+    CMD curl -f http://localhost:8080/_stcore/health || exit 1
 
 # Run the app.
 # CMD (not ENTRYPOINT) so deployment platforms can override this command
@@ -45,6 +45,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 # --server.headless=true   suppresses the browser-open prompt.
 # --server.address=0.0.0.0 makes the app reachable outside the container.
 CMD ["streamlit", "run", "app.py", \
-     "--server.port=8501", \
+     "--server.port=8080", \
      "--server.address=0.0.0.0", \
      "--server.headless=true"]
