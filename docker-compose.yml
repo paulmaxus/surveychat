@@ -18,8 +18,9 @@ services:
     build: .
     ports:
       - "8080:8080"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    env_file: "src_ansible.env"
+    #environment:
+    #  - OPENAI_API_KEY=${OPENAI_API_KEY}
     #secrets:
     #  - OPENAI_API_KEY
     #env_file:
