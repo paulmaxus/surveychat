@@ -303,7 +303,7 @@ def build_transcript(messages: list) -> dict:
 #
 #  The API key is read from OPENAI_API_KEY in the .env file - do not paste
 #  keys directly here.
-API_BASE_URL = "https://ai-research-proxy.azurewebsites.net"
+API_BASE_URL = "https://llmproxy.uva.nl"
 
 # ── How many chatbot conditions does your study have? ─────────────────────────
 #
