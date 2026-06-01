@@ -18,7 +18,7 @@ services:
     build: .
     ports:
       - "8080:8080"
-    env_file: "/rsc/src_ansible.env"
+    env_file: "src_ansible.env"
     command: ["sh", "-c", "env && sleep 300"]
     #environment:
     #  - OPENAI_API_KEY=${OPENAI_API_KEY}
