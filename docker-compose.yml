@@ -19,13 +19,13 @@ services:
     ports:
       - "8080:8080"
     env_file: "src_ansible.env"
-    command: 
-      - sh
-      - -c
-      - |
-        echo "=== Environment Variables ==="
-        env | sort
-        echo "============================="
+    #command: 
+    #  - sh
+    #  - -c
+    #  - |
+    #    echo "=== Environment Variables ==="
+    #    env | sort
+    #    echo "============================="
     #environment:
     #  - OPENAI_API_KEY=${OPENAI_API_KEY}
     #secrets:
