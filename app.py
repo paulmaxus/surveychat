@@ -128,7 +128,7 @@
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # ── Third-party ───────────────────────────────────────────────────────────────
 import streamlit as st
@@ -408,6 +408,19 @@ MAX_TOKENS = None    # e.g. 512, or None for no cap
 #                 Example: MAX_EXCHANGES = 6 gives a 6-turn interview.
 MAX_EXCHANGES = None   # e.g. 6, or None for no limit
 
+#  MAX_TIME  Soft time limit, in seconds, for the whole conversation. The
+#            countdown starts the moment the first assistant message is shown
+#            (the seeded "initial_message", or the first generated reply if
+#            there isn't one) and is displayed to the participant as a live
+#            countdown. Once it reaches zero, the message box is disabled
+#            and a short notice asks the participant to click "End chat" -
+#            just like MAX_EXCHANGES, this is a soft cap: the transcript is
+#            NOT shown automatically, and there is no minimum time, so
+#            participants can always end the chat early.
+#            Set to None for no time limit.
+#            Example: MAX_TIME = 600 gives participants 10 minutes.
+MAX_TIME = None   # e.g. 600 for a 10-minute limit, or None for no limit
+
 # ── Study title (shown in the browser tab and as the page heading) ────────────
 STUDY_TITLE = "surveychat"
 
@@ -495,6 +508,10 @@ END_CHAT_BUTTON_BELOW = True
 #                                           cap the box is disabled and the
 #                                           participant is asked to click End
 #                                           chat. None = no limit.
+#  MAX_TIME               None              Soft time limit in seconds, shown as
+#                                           a live countdown. Starts once the
+#                                           first assistant message is shown.
+#                                           None = no limit.
 #  STUDY_TITLE            "surveychat"      Browser tab title and page heading.
 #  WELCOME_MESSAGE        ""                Banner shown above the chat.
 #                                           Set to "" to hide.
@@ -795,6 +812,19 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     line-height: 1.55;
 }
 
+/* ── MAX_TIME countdown ────────────────────────────────────────────────────── */
+.timer-banner {
+    display: inline-block;
+    background: #EFF1F3;
+    border: 1px solid #5C6C79;
+    border-radius: 6px;
+    padding: 0.35rem 0.75rem;
+    color: #1F2429;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.9rem;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -901,6 +931,16 @@ if "confirm_end" not in st.session_state:
 if "limit_reached" not in st.session_state:
     st.session_state["limit_reached"] = False
 
+# UTC timestamp set the moment the first assistant message is shown (see
+# _start_timer_if_needed). None until then, and forever if MAX_TIME is None.
+if "chat_start_time" not in st.session_state:
+    st.session_state["chat_start_time"] = None
+
+# Flipped to True once MAX_TIME seconds have elapsed since chat_start_time.
+# Disables the message box the same way limit_reached does (see MAX_TIME).
+if "time_limit_reached" not in st.session_state:
+    st.session_state["time_limit_reached"] = False
+
 # Flipped to True the moment the participant sends their first message.
 # The End button is hidden until this is True to avoid showing a useless
 # button before any conversation has happened.
@@ -958,6 +998,60 @@ def _rollback_unanswered_user_message():
         and st.session_state["messages"][-1].get("role") == "user"
     ):
         st.session_state["messages"].pop()
+
+
+def _start_timer_if_needed():
+    """Start the MAX_TIME countdown the first time an assistant message is shown."""
+    if MAX_TIME is not None and st.session_state["chat_start_time"] is None:
+        st.session_state["chat_start_time"] = datetime.now(timezone.utc)
+
+
+def render_timer_widget():
+    """
+    Show a live MAX_TIME countdown once the timer has started.
+
+    Renders nothing if MAX_TIME is unset or the timer hasn't started yet
+    (chat_start_time is None).  The countdown itself runs client-side in JS
+    - computed from an absolute end timestamp - so it keeps ticking between
+    Streamlit reruns.  It is purely visual: like MAX_EXCHANGES, the actual
+    cutoff is enforced by the server-side elapsed-time check in the main chat
+    flow below, which runs on the next natural rerun (sending a message,
+    clicking a button, refreshing the page) and disables the message box.
+    """
+    if MAX_TIME is None or st.session_state["chat_start_time"] is None:
+        return
+
+    if st.session_state["time_limit_reached"]:
+        st.html(
+            '<div class="timer-banner">⏱ Time is up</div>'
+        )
+        return
+
+    end_time = st.session_state["chat_start_time"] + timedelta(seconds=MAX_TIME)
+    st.html(f"""
+        <div id="time-remaining" class="timer-banner">Time remaining: --:--</div>
+        <script>
+        (function() {{
+          if (window.__surveychatTimerInterval) {{
+            clearInterval(window.__surveychatTimerInterval);
+          }}
+          var endTime = new Date("{end_time.isoformat()}").getTime();
+          var el = document.getElementById('time-remaining');
+          function tick() {{
+            var remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+            var m = Math.floor(remaining / 60);
+            var s = remaining % 60;
+            el.textContent = '⏱ Time remaining: ' + m + ':' + (s < 10 ? '0' : '') + s;
+            if (remaining <= 0) {{
+              clearInterval(window.__surveychatTimerInterval);
+              el.textContent = '⏱ Time is up';
+            }}
+          }}
+          tick();
+          window.__surveychatTimerInterval = setInterval(tick, 1000);
+        }})();
+        </script>
+    """, unsafe_allow_javascript=True)
 
 
 def generate_reply(active_condition: dict):
@@ -1084,6 +1178,7 @@ def generate_reply(active_condition: dict):
             "content":   response,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
+        _start_timer_if_needed()
         if MAX_EXCHANGES is not None and user_turns >= MAX_EXCHANGES:
             st.session_state["limit_reached"] = True
 
@@ -1128,8 +1223,9 @@ def generate_reply(active_condition: dict):
 #    • The End button appears after the first exchange.  A two-step
 #      confirmation (End → Confirm) prevents participants from accidentally
 #      discarding their conversation.
-#    • If MAX_EXCHANGES is reached, the message box is disabled and the
-#      participant is asked to click End chat to finish (soft cap).
+#    • If MAX_EXCHANGES or MAX_TIME is reached, the message box is disabled
+#      and the participant is asked to click End chat to finish (soft cap).
+#      A live countdown is shown once MAX_TIME is set and started.
 #
 #  Stage 3 - Transcript panel
 #    • Displayed when chat_ended is True.
@@ -1210,6 +1306,7 @@ if _initial_msg and not st.session_state["messages"]:
         "content":   _initial_msg,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
+    _start_timer_if_needed()
 
 # ── Active chat ───────────────────────────────────────────────────────────────
 #
@@ -1226,10 +1323,23 @@ if _initial_msg and not st.session_state["messages"]:
 #
 #  In both layouts the End button appears only after the first exchange
 #  (has_sent_message) and uses a two-step End -> Confirm to prevent accidental
-#  termination.  When MAX_EXCHANGES is reached, limit_reached disables the box
-#  and asks the participant to click End chat (a soft cap - the transcript is
-#  not shown automatically).
+#  termination. When MAX_EXCHANGES or MAX_TIME is reached, the box is disabled
+#  and the participant is asked to click End chat (a soft cap - the transcript
+#  is not shown automatically).
 if not st.session_state["chat_ended"]:
+
+    # Check the MAX_TIME countdown server-side, same soft-cap pattern as
+    # MAX_EXCHANGES - enforced on the next natural rerun, not instantly.
+    if (
+        MAX_TIME is not None
+        and st.session_state["chat_start_time"] is not None
+        and not st.session_state["time_limit_reached"]
+    ):
+        _elapsed = (
+            datetime.now(timezone.utc) - st.session_state["chat_start_time"]
+        ).total_seconds()
+        if _elapsed >= MAX_TIME:
+            st.session_state["time_limit_reached"] = True
 
     if END_CHAT_BUTTON_BELOW:
         # ---- Single-component layout: whole chat in one bordered container ---
@@ -1243,6 +1353,8 @@ if not st.session_state["chat_ended"]:
                     unsafe_allow_html=True,
                 )
 
+            render_timer_widget()
+
             # Inner container for the conversation, kept above the input.
             msgs_area = st.container()
             with msgs_area:
@@ -1251,10 +1363,11 @@ if not st.session_state["chat_ended"]:
                         st.markdown(message["content"])
 
             # Message box renders inline at the bottom of the container.  When
-            # the soft cap is reached it is replaced by a short notice.
-            if st.session_state["limit_reached"]:
+            # a soft cap (MAX_EXCHANGES or MAX_TIME) is reached it is replaced
+            # by a short notice.
+            if st.session_state["limit_reached"] or st.session_state["time_limit_reached"]:
                 st.info(
-                    "This conversation has reached its maximum length. "
+                    "This conversation has reached its maximum length or time limit. "
                     "Please click **End chat** below to finish and copy your transcript."
                 )
             elif prompt := st.chat_input("Type your message here…"):
@@ -1266,15 +1379,19 @@ if not st.session_state["chat_ended"]:
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
                     st.session_state["has_sent_message"] = True
+                    _timer_already_started = st.session_state["chat_start_time"] is not None
                     # New bubbles go into the history area, above the input.
                     with msgs_area:
                         with st.chat_message("user"):
                             st.markdown(prompt)
                         _resp, _ut = generate_reply(condition)
                     # Rerun to surface the disabled-box notice the moment the
-                    # soft cap is reached.  The End button below already shows
-                    # this run, since has_sent_message is now True.
-                    if _resp and st.session_state["limit_reached"]:
+                    # soft cap is reached, or to show the countdown as soon as
+                    # the timer starts (only rendered before chat_start_time was
+                    # set on this run). The End button below already shows this
+                    # run, since has_sent_message is now True.
+                    _timer_just_started = not _timer_already_started and st.session_state["chat_start_time"] is not None
+                    if _resp and (_timer_just_started or st.session_state["limit_reached"] or st.session_state["time_limit_reached"]):
                         st.rerun()
 
         # End-chat button, sitting just below the whole chat.  Hidden until the
@@ -1313,13 +1430,15 @@ if not st.session_state["chat_ended"]:
                 unsafe_allow_html=True,
             )
 
+        render_timer_widget()
+
         for message in st.session_state["messages"]:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        if st.session_state["limit_reached"]:
+        if st.session_state["limit_reached"] or st.session_state["time_limit_reached"]:
             st.info(
-                "This conversation has reached its maximum length. "
+                "This conversation has reached its maximum length or time limit. "
                 "Please click **End chat** (top right) to finish and copy your transcript."
             )
         elif prompt := st.chat_input("Type your message here…"):
@@ -1336,8 +1455,9 @@ if not st.session_state["chat_ended"]:
                 _resp, _ut = generate_reply(condition)
                 # Rerun to reveal the top-right End button on the first exchange
                 # (it renders above the input, so it isn't visible until the next
-                # run) or to surface the soft-cap notice.
-                if _resp and (_ut == 1 or st.session_state["limit_reached"]):
+                # run), to surface the soft-cap notice, or to show the countdown
+                # as soon as the timer starts.
+                if _resp and (_ut == 1 or st.session_state["limit_reached"] or st.session_state["time_limit_reached"]):
                     st.rerun()
 
 # =============================================================================

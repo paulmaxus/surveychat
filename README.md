@@ -99,6 +99,7 @@ CONDITIONS = [
 | `TEMPERATURE` | Model default | How varied the chatbot's replies are. `0` = very consistent, `1` = more natural variation. Leave as `None` to use the AI provider's default. |
 | `MAX_TOKENS` | No limit | Maximum length of each chatbot reply. Set a number (e.g. `512`) to keep replies concise and control costs. |
 | `MAX_EXCHANGES` | No limit | Maximum number of messages a participant can send. When this limit is reached, the message box is disabled and the participant is asked to click **End chat** to finish and copy their transcript. Set e.g. `6` for a fixed-length interview. |
+| `MAX_TIME` | No limit | Maximum conversation length in seconds, shown to participants as a live countdown that starts once the first assistant message appears. When it reaches zero, the message box is disabled and the participant is asked to click **End chat**. There is no minimum time - participants can always end early. Set e.g. `600` for a 10-minute limit. |
 | `STUDY_TITLE` | `"surveychat"` | The name shown in the browser tab and at the top of the page. |
 | `WELCOME_MESSAGE` | *(none)* | A short instruction or welcome note shown at the top of the chat. Leave as `""` to show nothing (useful when Qualtrics already shows instructions above the chatbot). |
 | `PASSCODE_ENTRY_PROMPT` | see app.py | The instruction text shown above the passcode box. |
